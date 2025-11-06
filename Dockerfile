@@ -1,48 +1,46 @@
 # Use PHP 8.2 with FPM (FastCGI Process Manager)
-# FPM is optimized for handling multiple PHP requests efficiently
 FROM php:8.2-fpm
 
-# Set where all commands will run inside the container
+# Set working directory
 WORKDIR /var/www/html
 
 # Install system dependencies and Nginx
 RUN apt-get update && apt-get install -y \
-    git \                    # For Composer packages from Git
-    unzip \                  # To extract Composer packages
-    libonig-dev \           # Required for mbstring extension
-    libzip-dev \            # Required for zip extension
-    zip \                    # To create zip files
-    curl \                   # To make HTTP requests
-    nginx \                  # Web server (THIS IS THE KEY!)
-    && apt-get clean && rm -rf /var/lib/apt/lists/*  # Clean up to reduce image size
+    git \
+    unzip \
+    libonig-dev \
+    libzip-dev \
+    zip \
+    curl \
+    nginx \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Install PHP extensions that Laravel needs
+# Install PHP extensions
 RUN docker-php-ext-install pdo pdo_mysql mbstring zip
 
-# Copy Composer from the official Composer image
+# Copy Composer from official image
 COPY --from=composer:2.6 /usr/bin/composer /usr/bin/composer
 
-# Copy all your Laravel project files into the container
+# Copy project files
 COPY . .
 
-# Install all PHP dependencies (no dev dependencies for production)
+# Install PHP dependencies
 RUN composer install --no-dev --optimize-autoloader
 
-# Set proper file permissions
-# www-data is the user that Nginx and PHP-FPM run as
+# Set proper permissions
 RUN chown -R www-data:www-data /var/www/html \
-    && chmod -R 755 /var/www/html/storage \      # Laravel needs to write logs here
-    && chmod -R 755 /var/www/html/bootstrap/cache # Laravel caches files here
+    && chmod -R 755 /var/www/html/storage \
+    && chmod -R 755 /var/www/html/bootstrap/cache
 
-# Copy our custom Nginx configuration
+# Copy Nginx configuration
 COPY nginx.conf /etc/nginx/nginx.conf
 
-# Copy our startup script
+# Copy start script
 COPY start.sh /usr/local/bin/start.sh
-RUN chmod +x /usr/local/bin/start.sh  # Make it executable
+RUN chmod +x /usr/local/bin/start.sh
 
-# Tell Docker which port this container will use
+# Expose port
 EXPOSE 8000
 
-# Run our startup script when the container starts
+# Run startup script
 CMD ["/usr/local/bin/start.sh"]
