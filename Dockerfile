@@ -1,31 +1,35 @@
-# Use official PHP image
+# Use the official PHP image with Composer and necessary extensions
 FROM php:8.2-fpm
+
+# Set working directory
+WORKDIR /var/www/html
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
-    git unzip libpng-dev libjpeg-dev libfreetype6-dev libonig-dev libxml2-dev zip curl && \
-    docker-php-ext-install pdo pdo_mysql mbstring exif pcntl bcmath gd
+    git \
+    unzip \
+    libonig-dev \
+    libzip-dev \
+    zip \
+    curl
 
-# Set working directory
-WORKDIR /app
+# Install PHP extensions
+RUN docker-php-ext-install pdo pdo_mysql mbstring zip
 
-# Copy composer files first (for layer caching)
-COPY composer.json composer.lock ./
+# Copy Composer from official image
+COPY --from=composer:2.6 /usr/bin/composer /usr/bin/composer
 
-# Install PHP dependencies
-RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
-RUN composer install --no-dev --optimize-autoloader
-
-# Copy the entire project
+# Copy project files
 COPY . .
 
-# Expose port 8000 (for Laravel’s PHP server)
+# Install PHP dependencies
+RUN composer install --no-dev --optimize-autoloader
+
+# Expose the port Laravel will run on
 EXPOSE 8000
 
-# Run Laravel setup commands only after the container starts
+# Start Laravel at runtime, not build time
 CMD php artisan key:generate --force && \
     php artisan migrate --force && \
     php artisan config:cache && \
-    php artisan route:cache && \
-    php artisan view:cache && \
     php artisan serve --host=0.0.0.0 --port=8000
