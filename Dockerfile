@@ -1,35 +1,48 @@
-# Use the official PHP image with Composer and necessary extensions
+# Use PHP 8.2 with FPM (FastCGI Process Manager)
+# FPM is optimized for handling multiple PHP requests efficiently
 FROM php:8.2-fpm
 
-# Set working directory
+# Set where all commands will run inside the container
 WORKDIR /var/www/html
 
-# Install system dependencies
+# Install system dependencies and Nginx
 RUN apt-get update && apt-get install -y \
-    git \
-    unzip \
-    libonig-dev \
-    libzip-dev \
-    zip \
-    curl
+    git \                    # For Composer packages from Git
+    unzip \                  # To extract Composer packages
+    libonig-dev \           # Required for mbstring extension
+    libzip-dev \            # Required for zip extension
+    zip \                    # To create zip files
+    curl \                   # To make HTTP requests
+    nginx \                  # Web server (THIS IS THE KEY!)
+    && apt-get clean && rm -rf /var/lib/apt/lists/*  # Clean up to reduce image size
 
-# Install PHP extensions
+# Install PHP extensions that Laravel needs
 RUN docker-php-ext-install pdo pdo_mysql mbstring zip
 
-# Copy Composer from official image
+# Copy Composer from the official Composer image
 COPY --from=composer:2.6 /usr/bin/composer /usr/bin/composer
 
-# Copy project files
+# Copy all your Laravel project files into the container
 COPY . .
 
-# Install PHP dependencies
+# Install all PHP dependencies (no dev dependencies for production)
 RUN composer install --no-dev --optimize-autoloader
 
-# Expose the port Laravel will run on
+# Set proper file permissions
+# www-data is the user that Nginx and PHP-FPM run as
+RUN chown -R www-data:www-data /var/www/html \
+    && chmod -R 755 /var/www/html/storage \      # Laravel needs to write logs here
+    && chmod -R 755 /var/www/html/bootstrap/cache # Laravel caches files here
+
+# Copy our custom Nginx configuration
+COPY nginx.conf /etc/nginx/nginx.conf
+
+# Copy our startup script
+COPY start.sh /usr/local/bin/start.sh
+RUN chmod +x /usr/local/bin/start.sh  # Make it executable
+
+# Tell Docker which port this container will use
 EXPOSE 8000
 
-# Start Laravel at runtime, not build time
-CMD php artisan key:generate --force && \
-    php artisan migrate --force && \
-    php artisan config:cache && \
-    php artisan serve --host=0.0.0.0 --port=8000
+# Run our startup script when the container starts
+CMD ["/usr/local/bin/start.sh"]
